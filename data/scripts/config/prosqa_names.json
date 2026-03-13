@@ -1,0 +1,22 @@
+{
+  "entity_names": [
+    "Alex", "Jack", "Sam", "Jordan", "James", "Taylor", "Daniel", "Oliver", "Lucas", "Henry",
+    "Morgan", "Casey", "Riley", "Avery", "Quinn", "Blake", "Dakota", "Skyler", "Parker", "Cameron", 
+    "William", "George", "Noah", "Liam", "Mason", "Ethan", "Jackson", "Aiden", "Logan", "Caden"
+  ],
+  "concept_names": [
+    "lorpus", "rorpus", "telfon", "melfon", "korpal",
+    "dorpal", "ventak", "sentak", "norbis", "sorbis",
+    "talvik", "melvik", "korban", "dorban", "ventis",
+    "sentis", "norbak", "sorbak", "telfik", "melfik",
+    "wumpus", "yumpus", "zumpus", "dumpus", "rompus",
+    "numpus", "tumpus", "vumpus", "impus",  "jompus", 
+    "timpus", "yimpus", "carpus", "shumpus", "zhompus",
+    "rempus", "fompus", "fimpus", "worpus", "sorpus",
+    "terpus", "gerpus", "sterpus", "kerpus", "sherpus",
+    "perpus", "bompus", "orpus", "welpus", "jelpus",
+    "felpus", "dolpus", "sarpus", "irpus", "chorpus",
+    "parpus", "arpus", "lempus", "hilpus", "gompus"
+  ]
+}
+

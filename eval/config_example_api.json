@@ -1,0 +1,23 @@
+{
+  "model": {
+    "type": "api"
+  },
+  "api": {
+    "provider": "openai",
+    "model": "qwen2.5-7b-instruct",
+    "api_key": "sk-bed171e662a84b9faf19b3425e081bab",
+    "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+  },
+  "data": {
+    "test_files": [
+      "data/easy_test.jsonl"
+    ],
+    "max_samples": null
+  },
+  "system_prompt": "You are a logical reasoning assistant. Answer the question based on the given facts. Only provide the answer (e.g., 'orpus' or 'fompus'), without any explanation.",
+  "output_dir": "eval/results",
+  "batch_size": 1,
+  "temperature": 0.0,
+  "max_tokens": 50
+}
+

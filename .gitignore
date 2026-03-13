@@ -1,0 +1,11 @@
+.vscode/
+checkpoints/
+
+*.png
+*.jsonl
+__pycache__/
+results/
+*.ipynb
+*.pyc
+.pytest_cache/
+*.log

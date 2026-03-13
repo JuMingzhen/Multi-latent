@@ -1,0 +1,27 @@
+{
+  "model": {
+    "type": "local",
+    "name": "gpt2",
+    "device": "cuda"
+  },
+  "api": {
+    "provider": "openai",
+    "model": "gpt-3.5-turbo",
+    "api_key": "",
+    "base_url": ""
+  },
+  "data": {
+    "test_files": [
+      "data/easy_test.jsonl",
+      "data/middle_test.jsonl",
+      "data/hard_test.jsonl"
+    ],
+    "max_samples": null
+  },
+  "system_prompt": "You are a logical reasoning assistant. Answer the question based on the given facts. Only provide the answer (e.g., 'orpus' or 'fompus'), without any explanation.",
+  "output_dir": "eval/results",
+  "batch_size": 1,
+  "temperature": 0.0,
+  "max_tokens": 50
+}
+
