@@ -32,7 +32,10 @@
     "bf16": false,
     "gradient_checkpointing": false,
     "dataloader_num_workers": 4,
-    "remove_unused_columns": false
+    "remove_unused_columns": false,
+    "report_to": "wandb",
+    "run_name": "my-gpt2-run",
+    "project": "llm-training"
   },
   "distributed": {
     "use_ddp": true,

@@ -223,12 +223,14 @@ def main():
         remove_unused_columns=training_config.get("remove_unused_columns", False),
         ddp_find_unused_parameters=config["distributed"].get("find_unused_parameters", False),
         local_rank=local_rank,
-        report_to="none",  # 不使用wandb等，可以后续添加
         save_strategy="steps" if training_config.get("save_steps") else "epoch",
         evaluation_strategy="steps" if eval_dataset and training_config.get("eval_steps") else "no",
         load_best_model_at_end=False,
         metric_for_best_model="loss",
         greater_is_better=False,
+        report_to=config["training"].get("report_to", "none"),       # 开启wandb
+        run_name=config["training"].get("run_name", "my-gpt2-run"),
+        project=config["training"].get("project", "llm-training")
     )
     
     # 创建Trainer
