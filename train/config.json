@@ -1,41 +1,43 @@
 {
   "model": {
-    "name_or_path": "gpt2",
-    "trust_remote_code": false
+    "name_or_path": "openai/gpt-2",
+    "trust_remote_code": true
   },
   "data": {
-    "train_file": "data/easy_test.jsonl",
-    "val_file": null,
+    "train_file": "data/easy_train.jsonl",
+    "val_file": "data/easy_val.jsonl",
     "max_samples": null,
-    "max_seq_length": 512,
-    "dataset_type": "answer_only",
+    "max_seq_length": 1536,
+    "dataset_type": "cot",
     "cot_prefix": ""
   },
   "training": {
     "method": "sft",
     "output_dir": "train/checkpoints",
-    "num_train_epochs": 3,
-    "per_device_train_batch_size": 4,
-    "per_device_eval_batch_size": 4,
+    "num_train_epochs": 10,
+    "per_device_train_batch_size": 32,
+    "per_device_eval_batch_size": 32,
     "gradient_accumulation_steps": 1,
     "learning_rate": 5e-5,
     "weight_decay": 0.01,
     "warmup_steps": 100,
     "warmup_ratio": null,
     "lr_scheduler_type": "cosine",
-    "logging_steps": 10,
+    "logging_steps": 100,
     "save_steps": 500,
-    "eval_steps": null,
-    "save_total_limit": 3,
+    "eval_steps": 500,
+    "save_total_limit": null,
+    "save_strategy": "epoch",
+    "evaluation_strategy": "epoch",
     "seed": 42,
-    "fp16": true,
+    "fp16": false,
     "bf16": false,
     "gradient_checkpointing": false,
     "dataloader_num_workers": 4,
     "remove_unused_columns": false,
     "report_to": "wandb",
-    "run_name": "my-gpt2-run",
-    "project": "llm-training"
+    "run_name": "cot-gpt2-easy-single",
+    "project": "multi-latent"
   },
   "distributed": {
     "use_ddp": true,
@@ -43,10 +45,9 @@
     "find_unused_parameters": false
   },
   "prompt_template": {
-    "system_prompt": "You are a logical reasoning assistant. Answer the question based on the given facts.",
+    "system_prompt": null,
     "input_template": "{context}",
     "output_template": "{answer}",
     "instruction_template": "{system_prompt}\n\n{input}\n\nAnswer:"
   }
 }
-

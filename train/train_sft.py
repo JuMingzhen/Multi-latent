@@ -191,7 +191,7 @@ def main():
     
     # 训练参数
     training_config = config["training"]
-    output_dir = training_config["output_dir"]
+    output_dir = os.path.join(training_config["output_dir"], config["training"].get("run_name", "my-gpt2-run"))
     
     # 如果是分布式训练，只在主进程创建输出目录
     if rank == 0:
@@ -223,9 +223,9 @@ def main():
         remove_unused_columns=training_config.get("remove_unused_columns", False),
         ddp_find_unused_parameters=config["distributed"].get("find_unused_parameters", False),
         local_rank=local_rank,
-        save_strategy="steps" if training_config.get("save_steps") else "epoch",
-        evaluation_strategy="steps" if eval_dataset and training_config.get("eval_steps") else "no",
-        load_best_model_at_end=False,
+        save_strategy=config.get("save_strategy", "steps"),
+        evaluation_strategy=config.get("evaluation_strategy", "no"),
+        load_best_model_at_end=True,
         metric_for_best_model="loss",
         greater_is_better=False,
         report_to=config["training"].get("report_to", "none"),       # 开启wandb

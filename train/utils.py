@@ -51,8 +51,9 @@ def graph_to_natural_language(record: Dict) -> Tuple[str, str]:
 def format_prompt(
     context: str,
     question: str,
+    entity_name: str,
     answer: str,
-    system_prompt: str = "",
+    system_prompt: str,
     instruction_template: str = "{system_prompt}\n\n{input}\n\nAnswer:"
 ) -> Tuple[str, str]:
     """
@@ -74,7 +75,7 @@ def format_prompt(
             input_text = f"{system_prompt}\n\n{input_text}"
     
     # 输出就是答案
-    output_text = answer.strip()
+    output_text = f"{entity_name} is a {answer}"
     
     return input_text, output_text
 

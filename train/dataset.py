@@ -101,6 +101,7 @@ class AnswerOnlySFTDataset(Dataset):
                 # 格式化输入输出
                 input_text, output_text = format_prompt(
                     context=context,
+                    entity_name=record.get("names", {}).get(0, ""),
                     question=question,
                     answer=answer,
                     system_prompt=system_prompt,
@@ -181,7 +182,7 @@ class CoTSFTDataset(Dataset):
         max_samples: Optional[int] = None,
         system_prompt: str = "",
         instruction_template: str = "{system_prompt}\n\n{input}\n\nAnswer:",
-        cot_prefix: str = "Let me think step by step:"
+        cot_prefix: str = " Let me think step by step:" #这里有空格是因为cot_prefix是前缀，需要与input_text拼接
     ):
         """
         初始化数据集
@@ -240,7 +241,7 @@ class CoTSFTDataset(Dataset):
                 self.samples.append({
                     "input": input_text,
                     "output": output_text,
-                    "full_text": f"{input_text} {output_text}",
+                    "full_text": f"{input_text}{output_text}",
                     "path": path,
                     "answer": answer
                 })
