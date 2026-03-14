@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, Optional
 import logging
 from datetime import datetime
-
+import sys
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
@@ -22,8 +22,10 @@ from transformers import (
     DataCollatorForLanguageModeling
 )
 from transformers.trainer_utils import set_seed
-
-from train.dataset import AnswerOnlySFTDataset, CoTSFTDataset, SFTDataset
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+from train.dataset import AnswerOnlySFTDataset, CoTSFTDataset, collate_fn
 from train.utils import load_jsonl
 
 
@@ -43,7 +45,7 @@ def setup_logging(rank: int = 0):
     else:
         # 非主进程只显示WARNING及以上级别，减少输出
         logging.basicConfig(
-            format='%(asctime)s - [RANK-%d] - %(levelname)s - %(message)s' % rank,
+            format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S',
             level=logging.WARNING
         )
@@ -111,13 +113,18 @@ def get_model_and_tokenizer(config: Dict, local_rank: int = 0, logger=None):
     return model, tokenizer
 
 
+class CustomDataCollator:
+    """自定义数据整理器，使用 dataset.py 中的 collate_fn"""
+    def __init__(self, tokenizer, pad_to_multiple_of=8):
+        self.tokenizer = tokenizer
+        self.pad_to_multiple_of = pad_to_multiple_of
+    
+    def __call__(self, features):
+        return collate_fn(features, self.tokenizer, self.pad_to_multiple_of)
+
 def create_data_collator(tokenizer):
     """创建数据整理器"""
-    return DataCollatorForLanguageModeling(
-        tokenizer=tokenizer,
-        mlm=False,
-        pad_to_multiple_of=8
-    )
+    return CustomDataCollator(tokenizer=tokenizer, pad_to_multiple_of=8)
 
 
 def main():
@@ -224,8 +231,8 @@ def main():
         ddp_find_unused_parameters=config["distributed"].get("find_unused_parameters", False),
         local_rank=local_rank,
         save_strategy=config.get("save_strategy", "steps"),
-        evaluation_strategy=config.get("evaluation_strategy", "no"),
-        load_best_model_at_end=True,
+        eval_strategy=config.get("evaluation_strategy", "no"),
+        load_best_model_at_end=False,
         metric_for_best_model="loss",
         greater_is_better=False,
         report_to=config["training"].get("report_to", "none"),       # 开启wandb
@@ -240,7 +247,7 @@ def main():
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         data_collator=data_collator,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
     )
     
     # 从checkpoint恢复（如果指定）

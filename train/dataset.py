@@ -8,8 +8,9 @@ import json
 from typing import Dict, List, Optional, Tuple
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer
+import torch
 
-from train.utils import graph_to_natural_language, format_prompt, load_jsonl
+from utils import graph_to_natural_language, format_prompt, load_jsonl
 
 
 def path_to_cot_text(path: List[int], names: Dict[int, str], answer: str) -> str:
@@ -300,11 +301,6 @@ class CoTSFTDataset(Dataset):
             "attention_mask": [1] * len(input_ids)
         }
 
-
-# 为了向后兼容，保留SFTDataset作为AnswerOnlySFTDataset的别名
-SFTDataset = AnswerOnlySFTDataset
-
-
 def collate_fn(batch: List[Dict], tokenizer: PreTrainedTokenizer, pad_to_multiple_of: int = 8):
     """
     批处理函数
@@ -338,8 +334,8 @@ def collate_fn(batch: List[Dict], tokenizer: PreTrainedTokenizer, pad_to_multipl
         labels.append(item["labels"] + [-100] * padding_len)
     
     return {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        "labels": labels
+        "input_ids": torch.tensor(input_ids, dtype=torch.long),
+        "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
+        "labels": torch.tensor(labels, dtype=torch.long)
     }
 
