@@ -2,7 +2,9 @@
   "model": {
     "type": "local",
     "name": "gpt2",
-    "device": "cuda"
+    "device": "cuda",
+    "trust_remote_code": false,
+    "torch_dtype": null
   },
   "api": {
     "provider": "openai",

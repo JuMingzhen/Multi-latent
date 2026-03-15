@@ -14,6 +14,7 @@ from collections import defaultdict
 
 try:
     import torch
+    import torch.distributed as dist
     from transformers import AutoTokenizer, AutoModelForCausalLM
     HAS_TRANSFORMERS = True
 except ImportError:
@@ -85,24 +86,79 @@ def graph_to_natural_language(record: Dict) -> str:
 
 
 class LocalModel:
-    """本地模型调用接口"""
+    """本地模型调用接口，支持本地路径和HuggingFace模型名称"""
     
-    def __init__(self, model_name: str, device: str = "cuda"):
+    def __init__(self, model_name: str, device: str = "cuda", trust_remote_code: bool = False, 
+                 local_rank: int = -1, torch_dtype: Optional[str] = None):
+        """
+        初始化本地模型
+        
+        Args:
+            model_name: 模型名称或本地路径
+            device: 设备类型 ("cuda" 或 "cpu")
+            trust_remote_code: 是否信任远程代码
+            local_rank: 本地GPU rank（用于分布式，-1表示不使用分布式）
+            torch_dtype: 模型数据类型 ("float16", "bfloat16", "float32")
+        """
         if not HAS_TRANSFORMERS:
             raise ImportError("transformers library is required for local models. Install with: pip install transformers torch")
         
-        self.device = device if torch.cuda.is_available() and device == "cuda" else "cpu"
-        print(f"Loading model {model_name} on {self.device}...")
+        # 确定设备
+        if local_rank >= 0:
+            # 分布式模式，使用指定的local_rank对应的GPU
+            self.device = f"cuda:{local_rank}"
+            torch.cuda.set_device(local_rank)
+        elif device == "cuda" and torch.cuda.is_available():
+            self.device = "cuda"
+        else:
+            self.device = "cpu"
         
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        # 确定数据类型
+        if torch_dtype == "float16":
+            dtype = torch.float16
+        elif torch_dtype == "bfloat16":
+            dtype = torch.bfloat16
+        else:
+            dtype = torch.float32
+        
+        # 检查是本地路径还是HuggingFace模型名称
+        model_path = Path(model_name)
+        is_local_path = model_path.exists() and model_path.is_dir()
+        
+        rank = int(os.environ.get("RANK", -1))
+        if rank >= 0:
+            print(f"[Rank {rank}] Loading model from {'local path' if is_local_path else 'HuggingFace'}: {model_name} on {self.device}...")
+        else:
+            print(f"Loading model from {'local path' if is_local_path else 'HuggingFace'}: {model_name} on {self.device}...")
+        
+        # 加载分词器
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+            trust_remote_code=trust_remote_code
+        )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         
-        self.model = AutoModelForCausalLM.from_pretrained(model_name)
-        self.model.to(self.device)
+        # 加载模型
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            trust_remote_code=trust_remote_code,
+            torch_dtype=dtype if dtype != torch.float32 else None
+        )
+        
+        # 移动到指定设备
+        if local_rank >= 0:
+            self.model.to(self.device)
+        else:
+            self.model.to(self.device)
+        
         self.model.eval()
         
-        print(f"Model loaded successfully.")
+        if rank >= 0:
+            print(f"[Rank {rank}] Model loaded successfully.")
+        else:
+            print(f"Model loaded successfully.")
     
     def generate(self, prompt: str, max_tokens: int = 50, temperature: float = 0.0) -> str:
         """生成回答"""
@@ -275,13 +331,47 @@ def evaluate_dataset(
     model,
     test_file: str,
     config: Dict,
-    output_file: Optional[str] = None
+    output_file: Optional[str] = None,
+    rank: int = -1,
+    world_size: int = 1
 ) -> Dict:
-    """评测整个数据集"""
-    print(f"\nEvaluating {test_file}...")
+    """
+    评测整个数据集，支持分布式评测
     
-    test_data = load_test_data(test_file, config["data"].get("max_samples"))
-    print(f"Loaded {len(test_data)} samples")
+    Args:
+        model: 模型实例
+        test_file: 测试文件路径
+        config: 配置字典
+        output_file: 输出文件路径
+        rank: 当前进程rank（-1表示非分布式）
+        world_size: 总进程数
+    """
+    is_distributed = rank >= 0 and world_size > 1
+    
+    if is_distributed:
+        print(f"\n[Rank {rank}] Evaluating {test_file}...")
+    else:
+        print(f"\nEvaluating {test_file}...")
+    
+    # 加载所有测试数据
+    all_test_data = load_test_data(test_file, config["data"].get("max_samples"))
+    
+    # 分布式模式下，每个进程处理一部分数据
+    start_idx = 0
+    if is_distributed:
+        # 将数据分片
+        chunk_size = len(all_test_data) // world_size
+        start_idx = rank * chunk_size
+        if rank == world_size - 1:
+            # 最后一个进程处理剩余的所有数据
+            end_idx = len(all_test_data)
+        else:
+            end_idx = start_idx + chunk_size
+        test_data = all_test_data[start_idx:end_idx]
+        print(f"[Rank {rank}] Processing samples {start_idx} to {end_idx-1} (total: {len(test_data)} samples)")
+    else:
+        test_data = all_test_data
+        print(f"Loaded {len(test_data)} samples")
     
     is_local = config["model"]["type"] == "local"
     system_prompt = config.get("system_prompt", "")
@@ -300,8 +390,11 @@ def evaluate_dataset(
                 model, record, system_prompt, is_local, max_tokens, temperature
             )
             
+            # 在分布式模式下，需要保存原始索引
+            original_idx = start_idx + i if is_distributed else i
+            
             results.append({
-                "index": i,
+                "index": original_idx,
                 "question": record.get("question", ""),
                 "ground_truth": record["answer"],
                 "predicted": response,
@@ -314,12 +407,21 @@ def evaluate_dataset(
             total += 1
             
             if (i + 1) % 100 == 0:
-                print(f"Processed {i + 1}/{len(test_data)} samples, Accuracy: {correct/total:.4f}")
+                if is_distributed:
+                    print(f"[Rank {rank}] Processed {i + 1}/{len(test_data)} samples, Accuracy: {correct/total:.4f}")
+                else:
+                    print(f"Processed {i + 1}/{len(test_data)} samples, Accuracy: {correct/total:.4f}")
         
         except Exception as e:
-            print(f"Error processing sample {i}: {e}")
+            original_idx = start_idx + i if is_distributed else i
+            error_msg = f"Error processing sample {original_idx}: {e}"
+            if is_distributed:
+                print(f"[Rank {rank}] {error_msg}")
+            else:
+                print(error_msg)
+            
             results.append({
-                "index": i,
+                "index": original_idx,
                 "question": record.get("question", ""),
                 "ground_truth": record["answer"],
                 "predicted": "ERROR",
@@ -331,6 +433,47 @@ def evaluate_dataset(
     elapsed_time = time.time() - start_time
     accuracy = correct / total if total > 0 else 0.0
     
+    # 分布式模式下，收集所有进程的结果
+    if is_distributed and HAS_TRANSFORMERS:
+        # 收集所有进程的结果
+        all_results = [None] * world_size
+        all_correct = [0] * world_size
+        all_total = [0] * world_size
+        
+        dist.all_gather_object(all_results, results)
+        dist.all_gather_object(all_correct, correct)
+        dist.all_gather_object(all_total, total)
+        
+        # 只在主进程（rank 0）合并结果
+        if rank == 0:
+            # 合并所有结果
+            all_results_flat = []
+            for r in all_results:
+                all_results_flat.extend(r)
+            
+            # 按索引排序
+            all_results_flat.sort(key=lambda x: x["index"])
+            
+            # 计算总体统计
+            total_correct = sum(all_correct)
+            total_samples = sum(all_total)
+            total_accuracy = total_correct / total_samples if total_samples > 0 else 0.0
+            
+            results = all_results_flat
+            correct = total_correct
+            total = total_samples
+            accuracy = total_accuracy
+        else:
+            # 非主进程返回空结果
+            return {
+                "test_file": test_file,
+                "total_samples": 0,
+                "correct": 0,
+                "accuracy": 0.0,
+                "elapsed_time": elapsed_time,
+                "samples_per_second": 0
+            }
+    
     summary = {
         "test_file": test_file,
         "total_samples": total,
@@ -340,13 +483,17 @@ def evaluate_dataset(
         "samples_per_second": total / elapsed_time if elapsed_time > 0 else 0
     }
     
-    print(f"\nResults for {test_file}:")
-    print(f"  Accuracy: {accuracy:.4f} ({correct}/{total})")
-    print(f"  Time: {elapsed_time:.2f}s")
-    print(f"  Speed: {summary['samples_per_second']:.2f} samples/s")
+    if is_distributed:
+        print(f"\n[Rank {rank}] Results for {test_file}:")
+    else:
+        print(f"\nResults for {test_file}:")
+    if not is_distributed or rank == 0:
+        print(f"  Accuracy: {accuracy:.4f} ({correct}/{total})")
+        print(f"  Time: {elapsed_time:.2f}s")
+        print(f"  Speed: {summary['samples_per_second']:.2f} samples/s")
     
-    # 保存结果
-    if output_file:
+    # 只在主进程（或非分布式模式）保存结果
+    if output_file and (not is_distributed or rank == 0):
         output_path = Path(output_file)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
@@ -361,27 +508,69 @@ def evaluate_dataset(
     return summary
 
 
+def setup_distributed():
+    """初始化分布式评测"""
+    if not HAS_TRANSFORMERS:
+        return -1, 1, -1
+    
+    if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
+        rank = int(os.environ["RANK"])
+        world_size = int(os.environ["WORLD_SIZE"])
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        
+        # 初始化分布式进程组
+        if not dist.is_initialized():
+            dist.init_process_group(backend="nccl")
+        
+        return rank, world_size, local_rank
+    return -1, 1, -1
+
+
+def cleanup_distributed():
+    """清理分布式评测"""
+    if HAS_TRANSFORMERS and dist.is_initialized():
+        dist.destroy_process_group()
+
+
 def main():
     parser = argparse.ArgumentParser(description="评测大模型能力")
     parser.add_argument("--config", type=str, default="eval/config.json", help="配置文件路径")
     parser.add_argument("--output", type=str, default=None, help="输出目录（默认使用配置文件中的output_dir）")
+    parser.add_argument("--local_rank", type=int, default=-1, help="本地GPU rank（用于分布式评测）")
     
     args = parser.parse_args()
     
+    # 设置分布式
+    rank, world_size, local_rank = setup_distributed()
+    is_distributed = rank >= 0 and world_size > 1
+    
     # 加载配置
     config = load_config(args.config)
-    print(f"Loaded config from {args.config}")
+    if is_distributed:
+        print(f"[Rank {rank}] Loaded config from {args.config}")
+    else:
+        print(f"Loaded config from {args.config}")
     
     # 初始化模型
     if config["model"]["type"] == "local":
-        print("Using local model...")
+        if is_distributed:
+            print(f"[Rank {rank}] Using local model...")
+        else:
+            print("Using local model...")
+        
         model = LocalModel(
             model_name=config["model"]["name"],
-            device=config["model"].get("device", "cuda")
+            device=config["model"].get("device", "cuda"),
+            trust_remote_code=config["model"].get("trust_remote_code", False),
+            local_rank=local_rank,
+            torch_dtype=config["model"].get("torch_dtype", None)
         )
         is_local = True
     else:
-        print("Using API model...")
+        if is_distributed:
+            print(f"[Rank {rank}] Using API model...")
+        else:
+            print("Using API model...")
         api_config = config["api"]
         model = APIModel(
             provider=api_config["provider"],
@@ -393,7 +582,12 @@ def main():
     
     # 确定输出目录
     output_dir = args.output or config.get("output_dir", "eval/results")
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    if not is_distributed or rank == 0:
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+    
+    # 等待所有进程
+    if is_distributed and HAS_TRANSFORMERS:
+        dist.barrier()
     
     # 评测所有测试文件
     all_summaries = []
@@ -401,24 +595,34 @@ def main():
     
     for test_file in test_files:
         if not os.path.exists(test_file):
-            print(f"Warning: Test file {test_file} not found, skipping...")
+            if is_distributed:
+                print(f"[Rank {rank}] Warning: Test file {test_file} not found, skipping...")
+            else:
+                print(f"Warning: Test file {test_file} not found, skipping...")
             continue
         
         # 生成输出文件名
         test_name = Path(test_file).stem
         model_name = config['api']['model'] if config['model']['type'] == 'api' else config['model']['name']
-        output_file = os.path.join(output_dir, f"{test_name}_{model_name}_results.json")
+        # 清理模型名称中的路径分隔符
+        model_name_clean = model_name.replace("/", "_").replace("\\", "_")
+        output_file = os.path.join(output_dir, f"{test_name}_{model_name_clean}_results.json")
         
-        summary = evaluate_dataset(model, test_file, config, output_file)
-        all_summaries.append(summary)
+        summary = evaluate_dataset(model, test_file, config, output_file, rank, world_size)
+        if summary["total_samples"] > 0:  # 只添加有效的结果
+            all_summaries.append(summary)
     
-    # 打印总体统计
-    if len(all_summaries) > 1:
+    # 打印总体统计（只在主进程或非分布式模式）
+    if (not is_distributed or rank == 0) and len(all_summaries) > 1:
         print("\n" + "="*50)
         print("Overall Summary:")
         print("="*50)
         for summary in all_summaries:
             print(f"  {Path(summary['test_file']).stem}: {summary['accuracy']:.4f}")
+    
+    # 清理分布式
+    if is_distributed:
+        cleanup_distributed()
 
 
 if __name__ == "__main__":

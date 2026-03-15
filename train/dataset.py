@@ -112,7 +112,7 @@ class AnswerOnlySFTDataset(Dataset):
                 self.samples.append({
                     "input": input_text,
                     "output": output_text,
-                    "full_text": f"{input_text}{output_text}"
+                    "full_text": f"{input_text} {output_text}"
                 })
             except Exception as e:
                 print(f"Error processing sample: {e}")
