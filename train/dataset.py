@@ -132,7 +132,6 @@ class AnswerOnlySFTDataset(Dataset):
         # 分别对input和output进行编码
         input_encoded = self.tokenizer(
             input_text,
-            add_special_tokens=True,
             return_tensors=None
         )
         input_ids_input = input_encoded["input_ids"]
@@ -140,10 +139,9 @@ class AnswerOnlySFTDataset(Dataset):
         # 对output编码（不添加特殊token，因为已经包含在input的末尾）
         output_encoded = self.tokenizer(
             output_text,
-            add_special_tokens=False,
             return_tensors=None
         )
-        output_ids = output_encoded["input_ids"]
+        output_ids = output_encoded["input_ids"] + [self.tokenizer.eos_token_id]
         
         # 组合input和output
         input_ids = input_ids_input + output_ids
@@ -264,7 +262,6 @@ class CoTSFTDataset(Dataset):
         # 分别对input和output进行编码
         input_encoded = self.tokenizer(
             input_text,
-            add_special_tokens=True, #实际上GPT2这里不会加特殊token,因为默认add_eos_token=False
             return_tensors=None
         )
         input_ids_input = input_encoded["input_ids"]
@@ -272,10 +269,9 @@ class CoTSFTDataset(Dataset):
         # 对output编码（不添加特殊token）
         output_encoded = self.tokenizer(
             output_text,
-            add_special_tokens=False,
             return_tensors=None
         )
-        output_ids = output_encoded["input_ids"]
+        output_ids = output_encoded["input_ids"] + [self.tokenizer.eos_token_id]
         
         # 组合input和output
         input_ids = input_ids_input + output_ids
