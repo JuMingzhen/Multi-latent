@@ -75,7 +75,7 @@ def format_prompt(
             input_text = f"{system_prompt}\n\n{input_text}"
     
     # 输出就是答案
-    output_text = f"{entity_name} is a {answer}"
+    output_text = f" {entity_name} is a {answer}" #这里有意添加空格
     
     return input_text, output_text
 

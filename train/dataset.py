@@ -264,7 +264,7 @@ class CoTSFTDataset(Dataset):
         # 分别对input和output进行编码
         input_encoded = self.tokenizer(
             input_text,
-            add_special_tokens=True,
+            add_special_tokens=True, #实际上GPT2这里不会加特殊token,因为默认add_eos_token=False
             return_tensors=None
         )
         input_ids_input = input_encoded["input_ids"]

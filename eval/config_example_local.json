@@ -1,7 +1,7 @@
 {
   "model": {
     "type": "local",
-    "name": "../models/GPT2",
+    "name": "../checkpoints/cot-gpt2-easy-single-20",
     "device": "cuda",
     "trust_remote_code": true,
     "torch_dtype": null
@@ -24,6 +24,6 @@
   "output_dir": "eval/results",
   "batch_size": 1,
   "temperature": 0.0,
-  "max_tokens": 50
+  "max_tokens": 100
 }
 

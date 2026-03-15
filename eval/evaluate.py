@@ -7,6 +7,7 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import time
@@ -241,10 +242,18 @@ def load_test_data(file_path: str, max_samples: Optional[int] = None) -> List[Di
     return data
 
 
-def extract_answer(response: str, options: List[str]) -> Optional[str]:
+def extract_answer(response: str, options: List[str], entity: Optional[str] = None) -> Optional[str]:
     """
     从模型响应中提取答案
-    尝试匹配选项中的任何一个
+    优先使用固定结构 "{entity} is a {concept}" 提取
+    
+    Args:
+        response: 模型响应文本
+        options: 候选答案列表
+        entity: 实体名称（用于匹配固定结构）
+    
+    Returns:
+        匹配到的答案，如果没有匹配则返回None
     """
     if not options:
         return None
@@ -252,12 +261,44 @@ def extract_answer(response: str, options: List[str]) -> Optional[str]:
     response_lower = response.lower().strip()
     options_lower = [opt.lower() for opt in options]
     
-    # 方法1: 直接匹配（包含关系）
+    # 优先方法：如果提供了entity，尝试从固定结构 "{entity} is a {concept}" 中提取
+    if entity:
+        entity_lower = entity.lower()
+        # 匹配模式：{entity} is a {concept}
+        # 使用正则表达式匹配，允许大小写不敏感，允许标点符号
+        pattern = re.compile(
+            rf'\b{re.escape(entity_lower)}\s+is\s+a\s+(\w+)',
+            re.IGNORECASE
+        )
+        matches = pattern.findall(response_lower)
+        
+        if matches:
+            # 取最后一个匹配（如果有多个）
+            extracted_concept = matches[-1].strip().rstrip(".,!?;:")
+            # 匹配选项
+            for i, opt_lower in enumerate(options_lower):
+                if opt_lower == extracted_concept:
+                    return options[i]
+        
+        # 也尝试匹配 "is a {concept}" 结构（entity可能在前面）
+        pattern2 = re.compile(
+            rf'\bis\s+a\s+(\w+)',
+            re.IGNORECASE
+        )
+        matches2 = pattern2.findall(response_lower)
+        if matches2:
+            # 取最后一个匹配
+            extracted_concept = matches2[-1].strip().rstrip(".,!?;:")
+            for i, opt_lower in enumerate(options_lower):
+                if opt_lower == extracted_concept:
+                    return options[i]
+    
+    # 回退方法1: 直接匹配（包含关系）
     for i, opt_lower in enumerate(options_lower):
         if opt_lower in response_lower:
             return options[i]
     
-    # 方法2: 提取第一个单词并匹配
+    # 回退方法2: 提取第一个单词并匹配
     words = response_lower.split()
     if words:
         first_word = words[0].rstrip(".,!?;:")
@@ -265,7 +306,7 @@ def extract_answer(response: str, options: List[str]) -> Optional[str]:
             if opt_lower == first_word:
                 return options[i]
     
-    # 方法3: 提取最后一个单词并匹配（有时答案在最后）
+    # 回退方法3: 提取最后一个单词并匹配（有时答案在最后）
     if words:
         last_word = words[-1].rstrip(".,!?;:")
         for i, opt_lower in enumerate(options_lower):
@@ -299,6 +340,11 @@ def evaluate_single(
     
     # 提取答案
     ground_truth = record["answer"]
+    
+    # 获取entity名称（通常是节点0）
+    names = {int(k): v for k, v in record.get("names", {}).items()}
+    entity = names.get(0, "")  # 节点0通常是实体
+    
     # 从问题中提取选项
     question = record.get("question", "")
     options = []
@@ -322,7 +368,6 @@ def evaluate_single(
     
     # 方法2: 如果没有从问题中提取到，使用concept_a_node和concept_b_node
     if not options:
-        names = {int(k): v for k, v in record["names"].items()}
         concept_a_node = record.get("concept_a_node")
         concept_b_node = record.get("concept_b_node")
         if concept_a_node is not None:
@@ -330,7 +375,7 @@ def evaluate_single(
         if concept_b_node is not None:
             options.append(names.get(concept_b_node, ""))
     
-    predicted = extract_answer(response, options)
+    predicted = extract_answer(response, options, entity)
     is_correct = predicted is not None and predicted.lower() == ground_truth.lower()
     
     return prompt, response, is_correct
