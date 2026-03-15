@@ -13,6 +13,15 @@ import time
 from collections import defaultdict
 
 try:
+    from tqdm import tqdm
+    HAS_TQDM = True
+except ImportError:
+    HAS_TQDM = False
+    # 如果没有 tqdm，创建一个简单的占位符
+    def tqdm(iterable, *args, **kwargs):
+        return iterable
+
+try:
     import torch
     import torch.distributed as dist
     from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -384,7 +393,22 @@ def evaluate_dataset(
     
     start_time = time.time()
     
-    for i, record in enumerate(test_data):
+    # 只在主进程（rank 0）或非分布式模式下显示进度条
+    show_progress = (not is_distributed or rank == 0)
+    
+    # 创建进度条
+    if show_progress:
+        pbar = tqdm(
+            enumerate(test_data),
+            total=len(test_data),
+            desc=f"Evaluating {Path(test_file).stem}",
+            unit="sample",
+            ncols=100
+        )
+    else:
+        pbar = enumerate(test_data)
+    
+    for i, record in pbar:
         try:
             prompt, response, is_correct = evaluate_single(
                 model, record, system_prompt, is_local, max_tokens, temperature
@@ -406,18 +430,20 @@ def evaluate_dataset(
                 correct += 1
             total += 1
             
-            if (i + 1) % 100 == 0:
-                if is_distributed:
-                    print(f"[Rank {rank}] Processed {i + 1}/{len(test_data)} samples, Accuracy: {correct/total:.4f}")
-                else:
-                    print(f"Processed {i + 1}/{len(test_data)} samples, Accuracy: {correct/total:.4f}")
+            # 更新进度条显示准确率
+            if show_progress and HAS_TQDM:
+                current_accuracy = correct / total if total > 0 else 0.0
+                pbar.set_postfix({
+                    "accuracy": f"{current_accuracy:.4f}",
+                    "correct": f"{correct}/{total}"
+                })
         
         except Exception as e:
             original_idx = start_idx + i if is_distributed else i
             error_msg = f"Error processing sample {original_idx}: {e}"
-            if is_distributed:
+            if is_distributed and not show_progress:
                 print(f"[Rank {rank}] {error_msg}")
-            else:
+            elif not is_distributed:
                 print(error_msg)
             
             results.append({
@@ -429,6 +455,10 @@ def evaluate_dataset(
                 "error": str(e)
             })
             total += 1
+    
+    # 关闭进度条
+    if show_progress and HAS_TQDM:
+        pbar.close()
     
     elapsed_time = time.time() - start_time
     accuracy = correct / total if total > 0 else 0.0

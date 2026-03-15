@@ -289,7 +289,7 @@ def main():
     parser.add_argument("--num", "-n", type=int, default=1000, help="Number of problems to generate.")
     parser.add_argument("--nodes", type=int, default=20, help="Number of nodes N per DAG (Algorithm 1).")
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
-    parser.add_argument("--config", type=str, default=None, help="Path to prosqa_names.json (default: config/prosqa_names.json).")
+    parser.add_argument("--config", type=str, default="config/prosqa_names.json", help="Path to prosqa_names.json (default: config/prosqa_names.json).")
     args = parser.parse_args()
 
     script_dir = Path(__file__).resolve().parent

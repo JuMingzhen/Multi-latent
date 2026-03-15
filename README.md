@@ -44,7 +44,10 @@ pip install -r requirements.txt
 - `data/middle_test.jsonl` - 中等难度测试集
 - `data/hard_test.jsonl` - 困难难度测试集
 
-如需生成新数据，使用数据生成脚本：
+如需生成新数据，使用数据生成脚本（注意不同数据集要设置不同种子，否则会一模一样） 
+本实验设置: 
+种子：test——41, train——42, val——43
+长度：test——1024, train——19200, val——1024
 ```bash
 cd data/scripts
 pip install -r requirements_prosqa.txt
@@ -60,8 +63,6 @@ python train/train_sft.py --config train/config.json
 
 #### 多卡分布式训练
 ```bash
-# 2卡训练
-torchrun --nproc_per_node=2 train/train_sft.py --config train/config.json
 
 # 4卡训练
 torchrun --nproc_per_node=4 train/train_sft.py --config train/config.json
@@ -78,7 +79,10 @@ python train/train_sft.py \
 
 #### 使用本地模型
 ```bash
+#单卡评测
 python eval/evaluate.py --config eval/config.json
+# 多卡评测
+torchrun --nproc_per_node=4 eval/evaluate.py --config eval/config.json
 ```
 
 #### 使用API模型

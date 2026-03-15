@@ -1,9 +1,9 @@
 {
   "model": {
     "type": "local",
-    "name": "gpt2",
+    "name": "../models/GPT2",
     "device": "cuda",
-    "trust_remote_code": false,
+    "trust_remote_code": true,
     "torch_dtype": null
   },
   "api": {
@@ -14,9 +14,11 @@
   },
   "data": {
     "test_files": [
-      "data/easy_test.jsonl"
+      "data/easy_test.jsonl",
+      "data/middle_test.jsonl",
+      "data/hard_test.jsonl"
     ],
-    "max_samples": 10
+    "max_samples": null
   },
   "system_prompt": "",
   "output_dir": "eval/results",
