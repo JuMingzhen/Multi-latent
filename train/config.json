@@ -9,18 +9,19 @@
     "max_samples": null,
     "max_seq_length": 1536,
     "dataset_type": "cot",
-    "cot_prefix": ""
+    "cot_prefix": "",
+    "multi_path": true
   },
   "training": {
     "method": "sft",
     "output_dir": "../checkpoints",
-    "num_train_epochs": 30,
+    "num_train_epochs": 10,
     "per_device_train_batch_size": 32,
     "per_device_eval_batch_size": 32,
     "gradient_accumulation_steps": 1,
     "learning_rate": 5e-5,
     "weight_decay": 0.01,
-    "warmup_steps": 500,
+    "warmup_steps": 200,
     "warmup_ratio": null,
     "lr_scheduler_type": "cosine",
     "logging_steps": 100,
@@ -39,7 +40,7 @@
     "dataloader_num_workers": 4,
     "remove_unused_columns": false,
     "report_to": "wandb",
-    "run_name": "gpt2-easy-cot-single-30",
+    "run_name": "gpt2-easy-cot-multi-10",
     "project": "multi-latent"
   },
   "distributed": {

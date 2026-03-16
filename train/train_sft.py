@@ -177,7 +177,7 @@ def main():
     # CoT数据集可能有额外参数
     if DatasetClass == CoTSFTDataset:
         dataset_kwargs["cot_prefix"] = data_config.get("cot_prefix", "Let me think step by step:")
-    
+        dataset_kwargs["multi_path"] = data_config.get("multi_path", False)
     train_dataset = DatasetClass(**dataset_kwargs)
     
     # 验证集（如果有）

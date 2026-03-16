@@ -681,7 +681,7 @@ def main():
         test_name = Path(test_file).stem
         model_name = config['api']['model'] if config['model']['type'] == 'api' else config['model']['name']
         # 清理模型名称中的路径分隔符
-        model_name_clean = model_name.replace("/", "_").replace("\\", "_")
+        model_name_clean = model_name.replace("/", "_").replace("\\", "_").replace(".._checkpoints", "")
         output_file = os.path.join(output_dir, f"{test_name}_{model_name_clean}_results.json")
         
         summary = evaluate_dataset(model, test_file, config, output_file, rank, world_size)

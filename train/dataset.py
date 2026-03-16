@@ -102,7 +102,7 @@ class AnswerOnlySFTDataset(Dataset):
                 # 格式化输入输出
                 input_text, output_text = format_prompt(
                     context=context,
-                    entity_name=record.get("names", {}).get(0, ""),
+                    entity_name=record.get("names", {}).get("0", ""),
                     question=question,
                     answer=answer,
                     system_prompt=system_prompt,
@@ -181,7 +181,8 @@ class CoTSFTDataset(Dataset):
         max_samples: Optional[int] = None,
         system_prompt: str = "",
         instruction_template: str = "{system_prompt}\n\n{input}\n\nAnswer:",
-        cot_prefix: str = " Let me think step by step:" #这里有空格是因为cot_prefix是前缀，需要与input_text拼接
+        cot_prefix: str = " Let me think step by step:", #这里有空格是因为cot_prefix是前缀，需要与input_text拼接
+        multi_path: bool = False
     ):
         """
         初始化数据集
@@ -216,14 +217,6 @@ class CoTSFTDataset(Dataset):
                 
                 if not answer or not paths:
                     continue
-                
-                # 选择第一条路径（如果有多条）
-                path = paths[0] if paths else []
-                
-                # 将路径转换为CoT文本
-                cot_text = path_to_cot_text(path, names, answer)
-                
-                # 格式化输入
                 input_text = f"{context} {question}".strip()
                 if system_prompt:
                     if "{system_prompt}" in instruction_template and "{input}" in instruction_template:
@@ -233,17 +226,33 @@ class CoTSFTDataset(Dataset):
                         )
                     else:
                         input_text = f"{system_prompt}\n\n{input_text}"
-                
-                # 输出包含CoT和答案
-                output_text = f"{self.cot_prefix} {cot_text}"
-                
-                self.samples.append({
-                    "input": input_text,
-                    "output": output_text,
-                    "full_text": f"{input_text}{output_text}",
-                    "path": path,
-                    "answer": answer
-                })
+                if not multi_path:
+                    # 仅选择第一条路径
+                    path = paths[0] if paths else []
+                    # 将路径转换为CoT文本
+                    cot_text = path_to_cot_text(path, names, answer)
+                    # 输出包含CoT和答案
+                    output_text = f"{self.cot_prefix} {cot_text}"
+                    
+                    self.samples.append({
+                        "input": input_text,
+                        "output": output_text,
+                        "full_text": f"{input_text}{output_text}",
+                        "path": path,
+                        "answer": answer
+                    })
+                else:
+                    # 选择所有路径
+                    for path in paths:
+                        cot_text = path_to_cot_text(path, names, answer)
+                        output_text = f"{self.cot_prefix} {cot_text}"
+                        self.samples.append({
+                            "input": input_text,
+                            "output": output_text,
+                            "full_text": f"{input_text}{output_text}",
+                            "path": path,
+                            "answer": answer
+                        })
             except Exception as e:
                 print(f"Error processing sample: {e}")
                 continue

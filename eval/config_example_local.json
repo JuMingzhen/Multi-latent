@@ -1,7 +1,7 @@
 {
   "model": {
     "type": "local",
-    "name": "../checkpoints/cot-gpt2-easy-single-20",
+    "name": "../checkpoints/gpt2-easy-answer-only-25/checkpoint-3750",
     "device": "cuda",
     "trust_remote_code": true,
     "torch_dtype": null
@@ -15,8 +15,7 @@
   "data": {
     "test_files": [
       "data/easy_test.jsonl",
-      "data/middle_test.jsonl",
-      "data/hard_test.jsonl"
+      "data/middle_test.jsonl"
     ],
     "max_samples": null
   },
@@ -24,6 +23,6 @@
   "output_dir": "eval/results",
   "batch_size": 1,
   "temperature": 0.0,
-  "max_tokens": 100
+  "max_tokens": 150
 }
 
