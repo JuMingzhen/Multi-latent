@@ -180,8 +180,7 @@ class LocalModel:
                 max_new_tokens=max_tokens,
                 temperature=temperature if temperature > 0 else None,
                 do_sample=temperature > 0,
-                pad_token_id=self.tokenizer.pad_token_id,
-                eos_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id
             )
         
         # 只返回新生成的部分
@@ -293,20 +292,21 @@ def extract_answer(response: str, options: List[str], entity: Optional[str] = No
                 if opt_lower == extracted_concept:
                     return options[i]
     
-    # 回退方法1: 直接匹配（包含关系）
-    for i, opt_lower in enumerate(options_lower):
-        if opt_lower in response_lower:
-            return options[i]
+    # # 回退方法1: 直接匹配（包含关系）
+    # for i, opt_lower in enumerate(options_lower):
+    #     if opt_lower in response_lower:
+    #         return options[i]
     
-    # 回退方法2: 提取第一个单词并匹配
-    words = response_lower.split()
-    if words:
-        first_word = words[0].rstrip(".,!?;:")
-        for i, opt_lower in enumerate(options_lower):
-            if opt_lower == first_word:
-                return options[i]
-    
+    # # 回退方法2: 提取第一个单词并匹配
+    # words = response_lower.split()
+    # if words:
+    #     first_word = words[0].rstrip(".,!?;:")
+    #     for i, opt_lower in enumerate(options_lower):
+    #         if opt_lower == first_word:
+    #             return options[i]
+
     # 回退方法3: 提取最后一个单词并匹配（有时答案在最后）
+    words = response_lower.split()
     if words:
         last_word = words[-1].rstrip(".,!?;:")
         for i, opt_lower in enumerate(options_lower):
@@ -378,7 +378,7 @@ def evaluate_single(
     predicted = extract_answer(response, options, entity)
     is_correct = predicted is not None and predicted.lower() == ground_truth.lower()
     
-    return prompt, response, is_correct
+    return prompt, response, is_correct, predicted
 
 
 def evaluate_dataset(
@@ -455,7 +455,7 @@ def evaluate_dataset(
     
     for i, record in pbar:
         try:
-            prompt, response, is_correct = evaluate_single(
+            prompt, response, is_correct, predicted = evaluate_single(
                 model, record, system_prompt, is_local, max_tokens, temperature
             )
             
@@ -465,8 +465,9 @@ def evaluate_dataset(
             results.append({
                 "index": original_idx,
                 "question": record.get("question", ""),
+                "response": response,
+                "extracted_prediction": predicted,
                 "ground_truth": record["answer"],
-                "predicted": response,
                 "is_correct": is_correct,
                 "prompt": prompt
             })

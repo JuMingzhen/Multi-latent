@@ -192,6 +192,9 @@ def main():
             instruction_template=config["prompt_template"].get("instruction_template", "{system_prompt}\n\n{input}\n\nAnswer:"),
             **({"cot_prefix": data_config.get("cot_prefix", "Let me think step by step:")} if DatasetClass == CoTSFTDataset else {})
         )
+        logger.info(f"Loaded validation dataset with {len(eval_dataset)} samples")
+    else:
+        logger.info("No validation dataset provided")
     
     # 数据整理器
     data_collator = create_data_collator(tokenizer)
@@ -208,37 +211,68 @@ def main():
     if dist.is_initialized():
         dist.barrier()
     
-    training_args = TrainingArguments(
-        output_dir=output_dir,
-        num_train_epochs=training_config.get("num_train_epochs", 3),
-        per_device_train_batch_size=training_config.get("per_device_train_batch_size", 4),
-        per_device_eval_batch_size=training_config.get("per_device_eval_batch_size", 4),
-        gradient_accumulation_steps=training_config.get("gradient_accumulation_steps", 1),
-        learning_rate=training_config.get("learning_rate", 5e-5),
-        weight_decay=training_config.get("weight_decay", 0.01),
-        warmup_steps=training_config.get("warmup_steps"),
-        warmup_ratio=training_config.get("warmup_ratio"),
-        lr_scheduler_type=training_config.get("lr_scheduler_type", "cosine"),
-        logging_steps=training_config.get("logging_steps", 10),
-        save_steps=training_config.get("save_steps", 500),
-        eval_steps=training_config.get("eval_steps"),
-        save_total_limit=training_config.get("save_total_limit", 3),
-        fp16=training_config.get("fp16", False),
-        bf16=training_config.get("bf16", False),
-        gradient_checkpointing=training_config.get("gradient_checkpointing", False),
-        dataloader_num_workers=training_config.get("dataloader_num_workers", 4),
-        remove_unused_columns=training_config.get("remove_unused_columns", False),
-        ddp_find_unused_parameters=config["distributed"].get("find_unused_parameters", False),
-        local_rank=local_rank,
-        save_strategy=config.get("save_strategy", "steps"),
-        eval_strategy=config.get("evaluation_strategy", "no"),
-        load_best_model_at_end=False,
-        metric_for_best_model="loss",
-        greater_is_better=False,
-        report_to=config["training"].get("report_to", "none"),       # 开启wandb
-        run_name=config["training"].get("run_name", "my-gpt2-run"),
-        project=config["training"].get("project", "llm-training")
-    )
+    # 获取保存和评估策略
+    save_strategy = training_config.get("save_strategy", "epoch")
+    eval_strategy = training_config.get("evaluation_strategy", "no")
+    
+    # 如果策略是epoch但没有验证集，则禁用评估
+    if eval_strategy == "epoch" and eval_dataset is None:
+        logger.warning("evaluation_strategy is set to 'epoch' but no eval_dataset provided. Setting to 'no'.")
+        eval_strategy = "no"
+    
+    # 如果策略是epoch，则忽略save_steps和eval_steps
+    # 如果策略是steps，则使用save_steps和eval_steps
+    training_args_dict = {
+        "output_dir": output_dir,
+        "num_train_epochs": training_config.get("num_train_epochs", 3),
+        "per_device_train_batch_size": training_config.get("per_device_train_batch_size", 4),
+        "per_device_eval_batch_size": training_config.get("per_device_eval_batch_size", 4),
+        "gradient_accumulation_steps": training_config.get("gradient_accumulation_steps", 1),
+        "learning_rate": training_config.get("learning_rate", 5e-5),
+        "weight_decay": training_config.get("weight_decay", 0.01),
+        "warmup_steps": training_config.get("warmup_steps"),
+        "warmup_ratio": training_config.get("warmup_ratio"),
+        "lr_scheduler_type": training_config.get("lr_scheduler_type", "cosine"),
+        "logging_steps": training_config.get("logging_steps", 10),
+        "save_total_limit": training_config.get("save_total_limit", 3),
+        "fp16": training_config.get("fp16", False),
+        "bf16": training_config.get("bf16", False),
+        "gradient_checkpointing": training_config.get("gradient_checkpointing", False),
+        "dataloader_num_workers": training_config.get("dataloader_num_workers", 4),
+        "remove_unused_columns": training_config.get("remove_unused_columns", False),
+        "ddp_find_unused_parameters": config["distributed"].get("find_unused_parameters", False),
+        "local_rank": local_rank,
+        "save_strategy": save_strategy,
+        "eval_strategy": eval_strategy,
+        "load_best_model_at_end": training_config.get("load_best_model_at_end", False),
+        "metric_for_best_model": training_config.get("metric_for_best_model", "eval_loss"),
+        "greater_is_better": training_config.get("greater_is_better", False),
+        "report_to": training_config.get("report_to", "none"),
+        "run_name": training_config.get("run_name", "my-gpt2-run"),
+        "project": training_config.get("project", "llm-training"),
+        "logging_dir": os.path.join(output_dir, "logs"),  # TensorBoard日志目录
+    }
+    
+    # 根据策略设置save_steps和eval_steps
+    if save_strategy == "steps":
+        save_steps = training_config.get("save_steps")
+        if save_steps is not None:
+            training_args_dict["save_steps"] = save_steps
+        else:
+            logger.warning("save_strategy is 'steps' but save_steps is not set. Using default 500.")
+            training_args_dict["save_steps"] = 500
+    # epoch策略时，不设置save_steps，让Trainer按epoch保存
+    
+    if eval_strategy == "steps":
+        eval_steps = training_config.get("eval_steps")
+        if eval_steps is not None:
+            training_args_dict["eval_steps"] = eval_steps
+        else:
+            logger.warning("evaluation_strategy is 'steps' but eval_steps is not set. Using default 500.")
+            training_args_dict["eval_steps"] = 500
+    # epoch策略时，不设置eval_steps，让Trainer按epoch评估
+    
+    training_args = TrainingArguments(**training_args_dict)
     
     # 创建Trainer
     trainer = Trainer(
