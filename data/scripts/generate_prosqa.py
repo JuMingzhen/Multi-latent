@@ -123,8 +123,8 @@ def find_concept_leaves(
     Returns (node_id_for_A, node_id_for_B) or (None, None) if not both exist.
     """
     leaves = get_leaf_nodes(edges, nodes)
-    leaf_1 = [n for n in leaves if labels.get(n) == 1 and n != 0]
-    leaf_2 = [n for n in leaves if labels.get(n) == 2 and n != 0]
+    leaf_1 = [n for n in leaves if labels.get(n) == 1 and n != 0 and n != 1]
+    leaf_2 = [n for n in leaves if labels.get(n) == 2 and n != 0 and n != 1]
     a = random.choice(leaf_1) if leaf_1 else None
     b = random.choice(leaf_2) if leaf_2 else None
     return (a, b)
